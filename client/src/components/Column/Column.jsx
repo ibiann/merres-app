@@ -1,35 +1,139 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Container, Draggable } from "react-smooth-dnd";
+import { Dropdown, Form, Button } from "react-bootstrap";
+import { cloneDeep } from "lodash";
 import "./column.scss";
 import Card from "../Card/Card";
+import Remove from "../Dialogue/Remove";
 import { mapOrder } from "../../util/sort";
+import { MODAL_CONFIRM } from "../../util/const";
+import {
+  selectAllTextField,
+  useKeyBoardToSaveTitle,
+} from "../../util/contentEditable";
+
+import AddIcon from "@mui/icons-material/Add";
+import MenuIcon from "@mui/icons-material/Menu";
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 
 function Column(props) {
-  const { column } = props;
+  const { column, onCardDrop, onUpdateList } = props;
   const cards = mapOrder(column.cards, column.cardOrder, "id");
 
-  const onCardDrop = (dropResult) => {
-    console.log(dropResult);
+  const [showConfirmRemove, setShowConfirmRemove] = useState(false);
+  const toggleShowConfirmRemove = () =>
+    setShowConfirmRemove(!showConfirmRemove);
+
+  const [listTitle, setListTitle] = useState("");
+  const handleListTitleChange = (e) => setListTitle(e.target.value);
+
+  const [openNewCardForm, setOpenNewCardForm] = useState(false);
+  const toggleOpenNewCardForm = () => setOpenNewCardForm(!openNewCardForm);
+
+  const newCardInputTextRef = useRef(null);
+
+  const [newCardTitle, setNewCardTitle] = useState("");
+  const onNewCardTitleChange = (e) => setNewCardTitle(e.target.value);
+
+  useEffect(() => {
+    setListTitle(column.title);
+  }, [column.title]);
+
+  useEffect(() => {
+    if (newCardInputTextRef && newCardInputTextRef.current) {
+      newCardInputTextRef.current.focus();
+      newCardInputTextRef.current.select();
+    }
+  }, [openNewCardForm]);
+
+  const onRemoveAction = (type) => {
+    if (type === MODAL_CONFIRM) {
+      const newColumn = {
+        ...column,
+        _destroy: true,
+      };
+      onUpdateList(newColumn);
+    }
+    toggleShowConfirmRemove();
+  };
+
+  const handleTitleBlur = () => {
+    console.log(listTitle);
+    const newColumn = {
+      ...column,
+      title: listTitle,
+    };
+    onUpdateList(newColumn);
+  };
+
+  const addNewCard = () => {
+    if (!newCardTitle) {
+      newCardInputTextRef.current.focus();
+      return;
+    }
+    //copy same path from content of adding new card
+    const newCardToAdd = {
+      id: Math.random().toString(36).substr(2, 5),
+      colimnId: column.id,
+      boardId: column.boardId,
+      title: newCardTitle.trim(),
+      cover: null,
+    };
+
+    let newColumn = cloneDeep(column);
+    newColumn.cards.push(newCardToAdd);
+    newColumn.cardOrder.push(newCardToAdd.id);
+
+    console.log(newColumn);
+    onUpdateList(newColumn);
+    setNewCardTitle("");
+    toggleOpenNewCardForm();
   };
 
   return (
     <div className="columns">
-      <header className="column-drag-handle">{column.title}</header>
+      <header className="column-drag-handle">
+        <div className="column-list-title">
+          <Form.Control
+            size="sm"
+            type="text"
+            value={listTitle}
+            className="list-name-editable"
+            onClick={selectAllTextField}
+            onChange={handleListTitleChange}
+            onBlur={handleTitleBlur}
+            onKeyDown={useKeyBoardToSaveTitle}
+            onMouseDown={(e) => e.preventDefault()}
+            spellCheck="false"
+          />
+        </div>
+        <div className="dropdown-actions-list">
+          <Dropdown>
+            <Dropdown.Toggle
+              id="dropdown-basic"
+              size="sm"
+              className="dropdown-btn"
+            >
+              <MenuIcon className="dropwdown-menu-icon" />
+            </Dropdown.Toggle>
+            <Dropdown.Menu>
+              <Dropdown.Item onClick={toggleOpenNewCardForm}>
+                Add Card
+              </Dropdown.Item>
+              <Dropdown.Item onClick={toggleShowConfirmRemove}>
+                Remove
+              </Dropdown.Item>
+              <Dropdown.Item href="#/action-3">Move Cards</Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown>
+        </div>
+      </header>
       <div className="card-list">
         <Container
-          //react-smooth-dnd library
-
-          // onDragStart={(e) => console.log("drag started", e)}
-          // onDragEnd={(e) => console.log("drag end", e)}
-          // onDragEnter={() => {
-          //   console.log("drag enter:", column.id);
-          // }}
-          // onDragLeave={() => {
-          //   console.log("drag leave:", column.id);
-          // }}
-          // onDropReady={(p) => console.log("Drop ready: ", p)}
+          //react-dnd
           groupName="col"
-          onDrop={onCardDrop}
+          orientation="vertical"
+          onDrop={(dropResult) => onCardDrop(column.id, dropResult)}
           getChildPayload={(index) => cards[index]}
           dragClass="card-ghost"
           dropClass="card-ghost-drop"
@@ -46,8 +150,50 @@ function Column(props) {
             </Draggable>
           ))}
         </Container>
+        {/* copy similiar form from board content */}
+        {openNewCardForm && (
+          <div className="add-new-card">
+            <Form.Control
+              size="sm"
+              as="textarea"
+              row="3"
+              placeholder="Enter a title for this card..."
+              className="add-new-card-text-box"
+              ref={newCardInputTextRef}
+              value={newCardTitle}
+              onChange={onNewCardTitleChange}
+              onKeyDown={(e) => e.key === "Enter" && addNewCard()}
+            />
+          </div>
+        )}
       </div>
-      <footer>Add new card</footer>
+      <footer>
+        {openNewCardForm && (
+          <div className="add-new-card-handle">
+            <Button variant="outline-success" size="sm" onClick={addNewCard}>
+              Add card
+            </Button>
+            <span
+              className="cancel-adding-new-column-icon"
+              onClick={toggleOpenNewCardForm}
+            >
+              <DeleteSweepIcon />
+            </span>
+          </div>
+        )}
+        {!openNewCardForm && (
+          <div className="footer-action-handle" onClick={toggleOpenNewCardForm}>
+            <AddIcon className="mui-icon" />
+            Add new card
+          </div>
+        )}
+      </footer>
+      <Remove
+        show={showConfirmRemove}
+        onAction={onRemoveAction}
+        title="Remove Column"
+        content={`bruh ${column.title} bruh`}
+      />
     </div>
   );
 }
